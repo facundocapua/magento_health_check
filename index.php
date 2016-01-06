@@ -52,7 +52,7 @@ if (isset($_POST['submit'])) {
 <body>
 <h1>Project Checker</h1>
 <?php if (!empty($result)): ?>
-    <?php echo $cmd; ?>
+    <?php echo $result; ?>
 <?php else: ?>
     <form method="post" enctype="multipart/form-data">
         Upload your project files
