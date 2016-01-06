@@ -13,11 +13,11 @@ function rsearch($folder, $pattern)
 }
 
 if (isset($_POST['submit'])) {
-    exec('rm -rf ./tmp');
+    shell_exec('rm -rf ./tmp');
     mkdir('./tmp');
     $fileToTest = './tmp/' . $_FILES['file']['name'];
     if (move_uploaded_file($_FILES['file']['tmp_name'], $fileToTest)) {
-        exec("cd tmp/ && unzip " . $_FILES['file']['name']);
+        shell_exec("cd tmp/ && unzip " . $_FILES['file']['name']);
 
         $mageFile = rsearch('./tmp/', '/Mage\.php/');
         if ($mageFile) {
@@ -39,7 +39,7 @@ if (isset($_POST['submit'])) {
             $mageRootFolder = realpath(dirname($mageFile) . '/../');
             $vanillaMagentoFolder = realpath("./vanillas/" . $vanillaVersion);
             $cmd = "diff -urbB " . $vanillaMagentoFolder . "  " . $mageRootFolder . " | lsdiff";
-            $result = exec($cmd);
+            $result = shell_exec($cmd);
         }
     }
 }
@@ -52,7 +52,8 @@ if (isset($_POST['submit'])) {
 <body>
 <h1>Project Checker</h1>
 <?php if (!empty($result)): ?>
-    <?php echo $result; ?>
+    <strong>Command executed:</strong> <pre><?php echo $cmd; ?></pre><br />
+    <?php echo nl2br($result); ?>
 <?php else: ?>
     <form method="post" enctype="multipart/form-data">
         Upload your project files
