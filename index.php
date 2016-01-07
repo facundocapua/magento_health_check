@@ -17,7 +17,19 @@ if (isset($_POST['submit'])) {
     mkdir('./tmp');
     $fileToTest = './tmp/' . $_FILES['file']['name'];
     if (move_uploaded_file($_FILES['file']['tmp_name'], $fileToTest)) {
-        shell_exec("cd tmp/ && unzip " . $_FILES['file']['name']);
+        $extractCmd = '';
+        switch($_FILES['file']['type']){
+            case 'application/zip':
+                $extractCmd = 'unzip';
+                break;
+            case 'application/x-tar':
+                $extractCmd = 'tar -zxf';
+                break;
+        }
+        if(empty($extractCmd)){
+            throw new RuntimeException("The file extension is not suported.");
+        }
+        shell_exec("cd tmp/ && ".$extractCmd." " . $_FILES['file']['name']);
 
         $mageFile = rsearch('./tmp/', '/Mage\.php/');
         if ($mageFile) {
@@ -77,7 +89,7 @@ if (isset($_POST['submit'])) {
                 <div class="form-group">
                     <label for="file">Upload your project files</label>
                     <input type="file" name="file" id="file"/>
-                    <span id="helpBlock" class="help-block">Allowed extensions: .tgz, .zip</span>
+                    <span id="helpBlock" class="help-block">Allowed extensions: .tar.gz, .zip</span>
                 </div>
                 <button type="submit" name="submit" class="btn btn-primary">Check!</button>
             </form>
