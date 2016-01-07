@@ -12,49 +12,54 @@ function rsearch($folder, $pattern)
     return false;
 }
 
-if (isset($_POST['submit'])) {
-    shell_exec('rm -rf ./tmp');
-    mkdir('./tmp');
-    $fileToTest = './tmp/' . $_FILES['file']['name'];
-    if (move_uploaded_file($_FILES['file']['tmp_name'], $fileToTest)) {
-        $extractCmd = '';
-        switch($_FILES['file']['type']){
-            case 'application/zip':
-                $extractCmd = 'unzip';
-                break;
-            case 'application/x-tar':
-                $extractCmd = 'tar -zxf';
-                break;
-        }
-        if(empty($extractCmd)){
-            throw new RuntimeException("The file extension is not suported.");
-        }
-        shell_exec("cd tmp/ && ".$extractCmd." " . $_FILES['file']['name']);
-
-        $mageFile = rsearch('./tmp/', '/Mage\.php/');
-        if ($mageFile) {
-            include $mageFile;
-            $mageVersion = Mage::getVersionInfo();
-            $mageEdition = Mage::getEdition();
-
-            if ($mageEdition == Mage::EDITION_COMMUNITY) {
-                $vanillaVersion = 'CE-';
-            } else {
-                $vanillaVersion = 'EE-';
+$errorMessage = null;
+try {
+    if (isset($_POST['submit'])) {
+        shell_exec('rm -rf ./tmp');
+        mkdir('./tmp');
+        $fileToTest = './tmp/' . $_FILES['file']['name'];
+        if (move_uploaded_file($_FILES['file']['tmp_name'], $fileToTest)) {
+            $extractCmd = '';
+            switch($_FILES['file']['type']){
+                case 'application/zip':
+                    $extractCmd = 'unzip';
+                    break;
+                case 'application/x-tar':
+                    $extractCmd = 'tar -zxf';
+                    break;
             }
-            $vanillaVersion .= $mageVersion['major'] . '.' . $mageVersion['minor'] . '.' . $mageVersion['revision'] . '.' . $mageVersion['patch'];
-
-            if (!file_exists('./vanillas/' . $vanillaVersion)) {
-                throw new RuntimeException(sprintf('The version %s is not available for comparison!', $vanillaVersion));
+            if(empty($extractCmd)){
+                throw new RuntimeException("The file extension is not suported.");
             }
+            shell_exec("cd tmp/ && ".$extractCmd." " . $_FILES['file']['name']);
 
-            $mageRootFolder = realpath(dirname($mageFile) . '/../');
-            $vanillaMagentoFolder = realpath("./vanillas/" . $vanillaVersion);
-            $cmd = "diff -urbB " . $vanillaMagentoFolder . "  " . $mageRootFolder . " | lsdiff";
-            $result = shell_exec($cmd);
-            $result = str_replace($mageRootFolder, '', $result);
+            $mageFile = rsearch('./tmp/', '/Mage\.php/');
+            if ($mageFile) {
+                include $mageFile;
+                $mageVersion = Mage::getVersionInfo();
+                $mageEdition = Mage::getEdition();
+
+                if ($mageEdition == Mage::EDITION_COMMUNITY) {
+                    $vanillaVersion = 'CE-';
+                } else {
+                    $vanillaVersion = 'EE-';
+                }
+                $vanillaVersion .= $mageVersion['major'] . '.' . $mageVersion['minor'] . '.' . $mageVersion['revision'] . '.' . $mageVersion['patch'];
+
+                if (!file_exists('./vanillas/' . $vanillaVersion)) {
+                    throw new RuntimeException(sprintf('The version %s is not available for comparison!', $vanillaVersion));
+                }
+
+                $mageRootFolder = realpath(dirname($mageFile) . '/../');
+                $vanillaMagentoFolder = realpath("./vanillas/" . $vanillaVersion);
+                $cmd = "diff -urbB " . $vanillaMagentoFolder . "  " . $mageRootFolder . " | lsdiff";
+                $result = shell_exec($cmd);
+                $result = str_replace($mageRootFolder, '', $result);
+            }
         }
     }
+}catch(RuntimeException $e) {
+    $errorMessage = $e->getMessage();
 }
 ?>
 
@@ -82,6 +87,9 @@ if (isset($_POST['submit'])) {
                     <p class="bg-success">Good job!! No diffs with core files =)</p>
                 <?php else: ?>
                     <pre><?php echo nl2br($result); ?></pre>
+                <?php endif; ?>
+                <?php if (!is_null($errorMessage)): ?>
+                    <p class="bg-error"><?php echo $errorMessage; ?></p>
                 <?php endif; ?>
             <?php endif; ?>
 
