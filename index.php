@@ -1,37 +1,20 @@
 <?php
-function rsearch($folder, $pattern)
-{
-    $dir = new RecursiveDirectoryIterator($folder);
-    $ite = new RecursiveIteratorIterator($dir);
-    foreach ($ite as $file) {
-        if (preg_match($pattern, $file->getPathName())) {
-            return $file->getPathName();
-        }
-    }
 
-    return false;
-}
+require 'functions.php';
 
 $errorMessage = null;
+$warnings = [];
 try {
     if (isset($_POST['submit'])) {
         shell_exec('rm -rf ./tmp');
         mkdir('./tmp');
         $fileToTest = './tmp/' . $_FILES['file']['name'];
         if (move_uploaded_file($_FILES['file']['tmp_name'], $fileToTest)) {
-            $extractCmd = '';
-            switch($_FILES['file']['type']){
-                case 'application/zip':
-                    $extractCmd = 'unzip';
-                    break;
-                case 'application/x-tar':
-                    $extractCmd = 'tar -zxf';
-                    break;
-            }
-            if(empty($extractCmd)){
+            $extractCmd = getExtractCommand($_FILES['file']);
+            if (empty($extractCmd)) {
                 throw new RuntimeException("The file extension is not suported.");
             }
-            shell_exec("cd tmp/ && ".$extractCmd." " . $_FILES['file']['name']);
+            shell_exec("cd tmp/ && " . $extractCmd . " " . $_FILES['file']['name']);
 
             $mageFile = rsearch('./tmp/', '/Mage\.php/');
             if ($mageFile) {
@@ -40,25 +23,45 @@ try {
                 $mageEdition = Mage::getEdition();
 
                 if ($mageEdition == Mage::EDITION_COMMUNITY) {
-                    $vanillaVersion = 'CE-';
+                    $vanillaVersionPrefix = 'CE';
                 } else {
-                    $vanillaVersion = 'EE-';
+                    $vanillaVersionPrefix = 'EE';
                 }
-                $vanillaVersion .= $mageVersion['major'] . '.' . $mageVersion['minor'] . '.' . $mageVersion['revision'] . '.' . $mageVersion['patch'];
-
+                $mageVersionString = $mageVersion['major'] . '.' . $mageVersion['minor'] . '.' . $mageVersion['revision'] . '.' . $mageVersion['patch'];
+                $vanillaVersion = $vanillaVersionPrefix . '-' . $mageVersionString;
                 if (!file_exists('./vanillas/' . $vanillaVersion)) {
                     throw new RuntimeException(sprintf('The version %s is not available for comparison!', $vanillaVersion));
                 }
+                $vanillaMagentoFolder = realpath("./vanillas/" . $vanillaVersion);
+
+                $appliedPatchesFile = rsearch('./tmp/', '/applied\.patches\.list/');
+                if (!empty($appliedPatchesFile)) {
+                    $appliedPatches = getAppliedPatches($appliedPatchesFile);
+
+                    shell_exec('rm -rf ./vanillas/' . $vanillaVersion . '-patched');
+                    shell_exec('cp -R ./vanillas/' . $vanillaVersion . ' ./vanillas/' . $vanillaVersion . '-patched');
+
+                    foreach ($appliedPatches as $appliedPatch) {
+                        $patchFile = getPatchFile($appliedPatch, $vanillaVersionPrefix, $mageVersionString);
+                        if ($patchFile === null) {
+                            $warnings[] = sprintf('Patch %s not found!', $appliedPatch);
+                        }
+
+                        shell_exec('cp ./vanillas/patches/' . $patchFile . ' ./vanillas/' . $vanillaVersion . '-patched/');
+                        shell_exec('cd ./vanillas/' . $vanillaVersion . '-patched/ && sh ' . $patchFile);
+                    }
+
+                    $vanillaMagentoFolder = './vanillas/' . $vanillaVersion . '-patched';
+                }
 
                 $mageRootFolder = realpath(dirname($mageFile) . '/../');
-                $vanillaMagentoFolder = realpath("./vanillas/" . $vanillaVersion);
                 $cmd = "diff -urbB " . $vanillaMagentoFolder . "  " . $mageRootFolder . " | lsdiff";
                 $result = shell_exec($cmd);
                 $result = str_replace($mageRootFolder, '', $result);
             }
         }
     }
-}catch(RuntimeException $e) {
+} catch (RuntimeException $e) {
     $errorMessage = $e->getMessage();
 }
 ?>
@@ -79,17 +82,19 @@ try {
                 <small>by Summa Solutions</small>
             </h1>
             <?php if (isset($_POST['submit'])): ?>
+                <?php if (!empty($warnings)): ?>
+                    <p class="bg-warning"><?php echo implode($warnings, '<br />'); ?></p>
+                <?php endif; ?>
                 <?php if (!empty($cmd)): ?>
                     <strong>Command executed:</strong>
                     <pre><?php echo $cmd; ?></pre><br/>
                 <?php endif; ?>
-                <?php if (empty($result)): ?>
+                <?php if (!is_null($errorMessage)): ?>
+                    <p class="bg-danger"><?php echo $errorMessage; ?></p>
+                <?php elseif (empty($result)): ?>
                     <p class="bg-success">Good job!! No diffs with core files =)</p>
                 <?php else: ?>
                     <pre><?php echo nl2br($result); ?></pre>
-                <?php endif; ?>
-                <?php if (!is_null($errorMessage)): ?>
-                    <p class="bg-error"><?php echo $errorMessage; ?></p>
                 <?php endif; ?>
             <?php endif; ?>
 
